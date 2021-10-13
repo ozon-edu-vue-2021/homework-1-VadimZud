@@ -151,6 +151,7 @@
                 appendTask(dataKey, function() {
                     elem.textContent = value;
                 });
+                elem.textContent = value;
             }
 
             Object.defineProperty(data, dataKey, {
@@ -205,9 +206,6 @@
                 data['_' + computedKey + 'Update']();
             }
         });
-
-        counterEl.textContent = data.counter;
-        stepEl.textContent = data.step;
 
         const incrementCounterHandler = function () {
             data.counter++;
