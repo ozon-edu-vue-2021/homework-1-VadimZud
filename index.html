@@ -23,8 +23,8 @@
         </div>
         <div class="math">
             Step:
-            <button class="button minus">-2</button>
-            <button class="button plus">+2</button>
+            <button class="button minus" v-on:click="decrementStepHandler">-2</button>
+            <button class="button plus" v-on:click="incrementStepHandler">+2</button>
         </div>
     </section>
     <hr>
@@ -33,12 +33,12 @@
         <h2>How much will!</h2>
         <p><span class="counter"></span> + <span class="step"></span></p>
         <p><strong>Result: <span class="sum"></span></strong></p>
-        <div class="math">
+        <div class="math math-counter">
             Counter:
             <button class="button minus">-1</button>
             <button class="button plus">+1</button>
         </div>
-        <div class="math">
+        <div class="math math-step">
             Step:
             <button class="button minus">-2</button>
             <button class="button plus">+2</button>
@@ -52,55 +52,183 @@
                 step: 2
             },
             methods: {
-                incrementCounterHandler() {},
-                decrementCounterHandler() {}
-                //...
+                incrementCounterHandler() {
+                    this.counter++;
+                },
+                decrementCounterHandler() {
+                    this.counter--;
+                },
+                incrementStepHandler() {
+                    this.step += 2;
+                },
+                decrementStepHandler() {
+                    this.step -= 2;
+                },
             },
             computed: {
-                sum() {}
+                sum() {
+                    return this.counter + this.step;
+                }
             }
         })
     </script>
     <script>
+        const buttonElCounterMinus = document.querySelector('.js-app .math-counter .minus');
+        const buttonElCounterPlus = document.querySelector('.js-app .math-counter .plus');
+        const buttonElStepMinus = document.querySelector('.js-app .math-step .minus');
+        const buttonElStepPlus = document.querySelector('.js-app .math-step .plus');
         const counterEl = document.querySelector('.js-app .counter');
-        const buttonElMinus = document.querySelector('.js-app .minus');
-        const buttonElPlus = document.querySelector('.js-app .plus');
-        const sumEl = document.querySelector('.js-app .sum');
         const stepEl = document.querySelector('.js-app .step');
+        const sumEl = document.querySelector('.js-app .sum');
 
         const data = {
             counter: 1,
             step: 2
         };
 
-        const incrementCounterHandler = function () {};
-        const decrementCounterHandler = function () {};
-        //...
-        const getSum = function () {};
+        const computed = {
+            sum() {
+                return this.counter + this.step;
+            }
+        };
 
-        const queue = [getSum];
+        // Зависимости для computed полей. Чтобы не городить пока лишней логики, будем определять их руками.
+        const depends = {
+            sum: new Set(['counter', 'step']),
+        };
 
-        Object.keys(data).forEach(key => {
-            let value = data[key]; // data.counter, data.counter1, data.counter2
-            Object.defineProperty(data, key, {
+        // Соответствие между ключами из data и computed и элементами, в которых они должны отображаться
+        const elements = {
+            counter: counterEl,
+            step: stepEl,
+            sum: sumEl,
+        };
+
+        // Очередь дополнительных задач для каждого ключа из data и computed.
+        // Структура объекта:
+        // {
+        //    key1: [task1, task2...],
+        //    key2: [task1, task2...],
+        //    ...
+        // }
+        const queues = {};
+        
+        function appendTask(key, task) {
+            let queue = queues[key]
+            if (queue) {
+                queue.push(task);
+            } else {
+                queues[key] = [task];
+            }
+        }
+
+        function getQueue(key) {
+            return queues[key] || []; 
+        }
+
+        // Отсюда начинаем формировать конечный объект data.
+        // Все ключи из data получают и getter и setter,
+        // в соответствующую им очередь задач добавляются задачи отрисовки и пересчета зависимых computed полей.
+        // Все ключи из computed получают getter и метод для пересчета вида _keyUpdate(),
+        // в соответствующую им очередь задач добавляются задачи отрисовки и пересчета зависимых computed полей.
+        // Циклические зависимости в depends не отслеживаются, и ответственность за них возложена на программиста.
+        
+        Object.keys(data).forEach(dataKey => {
+            let value = data[dataKey]; // data.counter, data.counter1, data.counter2
+            
+            // Определяем задачи обновления зависимостей
+            Object.keys(depends).forEach(dependsKey => {
+                if (depends[dependsKey].has(dataKey)) {
+                    appendTask(dataKey, function() {
+                        this['_' + dependsKey + 'Update']();
+                    })
+                }
+            });
+
+            // Определяем задачу рендеринга
+            let elem = elements[dataKey];
+            if (elem) {
+                appendTask(dataKey, function() {
+                    elem.textContent = value;
+                });
+            }
+
+            Object.defineProperty(data, dataKey, {
                 get: function () {
-                    console.log('get');
-                    // queue.push();
                     return value;
                 },
                 set: function (newValue) {
-                    console.log('set');
                     value = newValue;
-                    queue.forEach(fn => fn());
-                }
+                    getQueue(dataKey).forEach(fn => fn.call(data));
+                },
             });
+        });
+
+        Object.keys(computed).forEach(computedKey => {
+            let computedFn = computed[computedKey];
+
+            if (computedFn instanceof Function) {
+                let value;
+
+                // Определяем задачи обновления зависимостей
+                Object.keys(depends).forEach(dependsKey => {
+                    if (depends[dependsKey].has(computedKey)) {
+                        appendTask(dataKey, function() {
+                            this['_' + computedKey + 'Update']();
+                        })
+                    }
+                });
+
+                // Определяем задачу рендеринга
+                let elem = elements[computedKey];
+                if (elem) {
+                    appendTask(computedKey, function() {
+                        elem.textContent = value;
+                    });
+                }
+
+                Object.defineProperty(data, computedKey, {
+                    get: function() {
+                        return value;
+                    },
+                });
+
+                data['_' + computedKey + 'Update'] = function () {
+                    let newValue = computedFn.call(data);
+
+                    if (newValue !== value) {
+                        value = newValue;
+                        getQueue(computedKey).forEach(fn => fn.call(data));
+                    }
+                }
+
+                data['_' + computedKey + 'Update']();
+            }
         });
 
         counterEl.textContent = data.counter;
         stepEl.textContent = data.step;
-        getSum();
-        buttonElMinus.addEventListener('click', decrementCounterHandler);
-        buttonElPlus.addEventListener('click', incrementCounterHandler);
+
+        const incrementCounterHandler = function () {
+            data.counter++;
+        };
+
+        const decrementCounterHandler = function () {
+            data.counter--;
+        };
+
+        const incrementStepHandler = function () {
+            data.step += 2;
+        };
+
+        const decrementStepHandler = function () {
+            data.step -= 2;
+        };
+
+        buttonElCounterMinus.addEventListener('click', decrementCounterHandler);
+        buttonElCounterPlus.addEventListener('click', incrementCounterHandler);
+        buttonElStepMinus.addEventListener('click', decrementStepHandler);
+        buttonElStepPlus.addEventListener('click', incrementStepHandler);
     </script>
 </body>
 
