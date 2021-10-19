@@ -141,7 +141,7 @@
                 if (depends[dependsKey].has(dataKey)) {
                     appendTask(dataKey, function() {
                         this['_' + dependsKey + 'Update']();
-                    })
+                    });
                 }
             });
 
@@ -176,7 +176,7 @@
                     if (depends[dependsKey].has(computedKey)) {
                         appendTask(dataKey, function() {
                             this['_' + computedKey + 'Update']();
-                        })
+                        });
                     }
                 });
 
